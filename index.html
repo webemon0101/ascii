@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>カスタムアスキーアートカメラ</title>
+    <style>
+        /* ベーススタイル */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+            background-color: #1e1e1e;
+            color: #00FF00;
+            min-height: 100vh;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #f2f2f2;
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+
+        /* アスキーアートの表示エリア */
+        #ascii-art {
+            white-space: pre;
+            font-size: 8px;
+            line-height: 6px;
+            padding: 10px;
+            background-color: #333;
+            color: #00ff00;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 500px;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
+        }
+
+        /* ビデオ要素（非表示） */
+        video {
+            display: none;
+        }
+
+        /* 入力欄とボタン */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            max-width: 500px;
+        }
+        input, button {
+            padding: 10px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            outline: none;
+        }
+        #custom-chars {
+            width: 100%;
+            max-width: 400px;
+        }
+        button {
+            background-color: #333;
+            color: #00ff00;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #444;
+        }
+
+        /* レスポンシブ対応 */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5em;
+            }
+            #ascii-art {
+                font-size: 6px;
+                line-height: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>カスタムアスキーアートカメラ</h1>
+    <video id="video" autoplay playsinline></video>
+    <div class="controls">
+        <input id="custom-chars" type="text" placeholder="使用する文字を入力">
+        <button id="toggle-color">白黒に切り替え</button>
+        <button id="download-ascii">アスキーアートをダウンロード</button>
+    </div>
+    <pre id="ascii-art"></pre>
+
+    <script>
+        const video = document.getElementById("video");
+        const asciiArt = document.getElementById("ascii-art");
+        const toggleButton = document.getElementById("toggle-color");
+        const downloadButton = document.getElementById("download-ascii");
+        const customCharsInput = document.getElementById("custom-chars");
+
+        let isColor = false;
+        let currentAsciiArt = "";
+        let customChars = ["k", "a", "w", "i"]; // デフォルトの使用文字
+
+        // カメラ映像を取得
+        navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+            video.srcObject = stream;
+            video.play();
+            video.addEventListener("loadeddata", processFrame); // loadeddataイベントで開始
+        });
+
+        // 白黒とカラーの切り替え
+        toggleButton.addEventListener("click", () => {
+            isColor = !isColor;
+            toggleButton.textContent = isColor ? "白黒に切り替え" : "カラーに切り替え";
+        });
+
+        // 使用する文字の更新
+        customCharsInput.addEventListener("input", () => {
+            const inputText = customCharsInput.value;
+            customChars = Array.from(new Set(inputText.split("")));
+        });
+
+        // アスキーアートをダウンロード
+        downloadButton.addEventListener("click", () => {
+            const blob = new Blob([currentAsciiArt], { type: "text/plain" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "ascii_art.txt";
+            link.click();
+        });
+
+        // フレームをアスキーアートに変換
+        function processFrame() {
+            const width = 80; // アスキーアートの横幅を設定
+            const aspectRatio = video.videoHeight / video.videoWidth;
+            const height = Math.floor(width * aspectRatio);
+
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
+            canvas.width = width;
+            canvas.height = height;
+
+            function updateAsciiArt() {
+                // 左右反転して画像を描画
+                context.save();
+                context.scale(-1, 1);  // 左右反転
+                context.drawImage(video, -width, 0, width, height);
+                context.restore();
+
+                const imageData = context.getImageData(0, 0, width, height).data;
+
+                let ascii = "";
+                for (let i = 0; i < imageData.length; i += 4) {
+                    const r = imageData[i];
+                    const g = imageData[i + 1];
+                    const b = imageData[i + 2];
+                    const brightness = (r + g + b) / 3;
+
+                    // 明るさに応じて文字を選択
+                    const charIndex = Math.floor((brightness / 255) * customChars.length);
+                    const char = customChars[charIndex] || " ";
+
+                    if (isColor) {
+                        ascii += `<span style="color: rgb(${r}, ${g}, ${b})">${char}</span>`;
+                    } else {
+                        ascii += char;
+                    }
+
+                    if ((i / 4 + 1) % width === 0) ascii += "\n";
+                }
+
+                currentAsciiArt = ascii.replace(/<[^>]*>/g, ""); // ダウンロード用のプレーンテキスト
+                asciiArt.innerHTML = ascii;
+                requestAnimationFrame(updateAsciiArt);
+            }
+
+            updateAsciiArt();
+        }
+    </script>
+</body>
+</html>
